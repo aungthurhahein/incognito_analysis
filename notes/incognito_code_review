@@ -1,0 +1,163 @@
+
+For plugin and Chrome developer, chrominum developer document provides architure and implementation guideline for most of the features and structure of Chrome browser. However, there is still lack in documentation of some featueres and also, private browsing mode is ignored due to prevention of security and reverse engineering for wrong usage. To extract class names and useful data stuctures about Incognito mode of Google Chrome, manual code review of the execution path of Chrominum browser and list data structure that represents identifier and signature of Incognito mode. Source Code is reviewed at Google Code Repository website and url for chromium project is https://code.google.com/p/chromium. One thing to consider at this ponint is that there are sevearl browser based on Chromiumn including Chrome, which means the implementation of Chrome can be vary with design of Chromium.
+
+### Browsing Mode
+
+There are options to disable incognito mode for security reason. Google Chrome have preference settings for enabling and disabling incognito mode with enum data type,Availability under IncognitoModePrefs. enum value 0 means Incognito mode is enabled, value 1 for disabled and 2 for forced incognito mode,also known as parental control mode. By looking at this class, it can give the incognito preference of Chrome browser.
+
+File Location
+
+   /src/chrome/browser/prefs/incognito_mode_prefs.h
+   /src/chrome/common/pref_names.cc
+
+// Specifies Incognito mode availability preferences.
+class IncognitoModePrefs {
+ public:
+  // Possible values for Incognito mode availability. Please, do not change
+  // the order of entries since numeric values are exposed to users.
+  enum Availability {
+    // Incognito mode enabled. Users may open pages in both Incognito mode and
+    // normal mode (the default behaviour).
+    ENABLED = 0,
+    // Incognito mode disabled. Users may not open pages in Incognito mode.
+    // Only normal mode is available for browsing.
+    DISABLED,
+    // Incognito mode forced. Users may open pages *ONLY* in Incognito mode.
+    // Normal mode is not available for browsing.
+    FORCED,
+
+    AVAILABILITY_NUM_TYPES
+  };
+}
+}
+
+
+### Browsing Session Profile
+
+The following ProfileType enum is declared within Profile class. For user logined with Google account, Profile Type can be either 0 or 1 according to user login session. As for users using without Google Account, it can be assumed that Chrome put them in Guest user account. 
+
+
+ /src/chrome/browser/profiles/profile.h
+
+ enum ProfileType {
+    REGULAR_PROFILE,  // Login user's normal profile
+    INCOGNITO_PROFILE,  // Login user's off-the-record profile
+    GUEST_PROFILE,  // Guest session's profile
+  };
+}
+
+
+### OTR Profile
+
+The comment block from the C header file of off_the_record_profile_impl said "OffTheRecordProfileImpl is a profile subclass that wraps an existing profile to make it suitable for the incognito mode." Most of the variables from Profile class are overrided by OffTheRecordProfileImpl and by extracting data from it, it can give valuable informationabout private browsing data.
+
+From the code snippets of the source code file of off_the_record_profile class, it can be seen that guest profile is also act like Incognito mode if Incognito mode is not disabled.
+
+
+  /src/chrome/browser/profiles/off_the_record_profile_impl.cc
+
+  set_is_guest_profile(
+      profile_->GetPath() == ProfileManager::GetGuestProfilePath());
+
+  // Guest profiles may always be OTR. Check IncognitoModePrefs otherwise.
+  DCHECK(profile_->IsGuestSession() ||
+         IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) !=
+             IncognitoModePrefs::DISABLED);
+
+
+From Chrome Histroy database, Chrome has a predictor classs that stores browsed URLs for ominibox prediction of user typing. It can be seen as Chrome URL, "chrome://predictors/". Based on the following code snippet, visited URLs are not stored for OTR profiles.
+
+/src/chrome/browser/profiles/off_the_record_profile_impl.cc
+chrome_browser_net::Predictor* OffTheRecordProfileImpl::GetNetworkPredictor() {
+  // We do not store information about websites visited in OTR profiles which
+  // is necessary for a Predictor, so we do not have a Predictor at all.
+  return NULL;
+}
+
+### Incognito Session Observer
+WindowedIncognitoObserver class watches for any incognito window being opened from the time it is instantiated to the time it is destroyed. Private enum data type,incognito_launched, is set to 1 if the Incognito mode is opened.
+
+src/chrome/browser/metrics/perf/windowed_incognito_observer.h
+class WindowedIncognitoObserver : public chrome::BrowserListObserver {
+ public:
+  WindowedIncognitoObserver();
+  ~WindowedIncognitoObserver() override;
+
+  // This method can be checked to see whether any incognito window has been
+  // opened since the time this object was created.
+  bool incognito_launched() const {
+    return incognito_launched_;
+  }
+  ... 
+
+
+### Data IO of Incognito mode
+
+
+Class, DatabaseTracker tracks all opened databases and manages them. Under namespace called storage, filepath variables are created for  "Databases.db" is the SQLite database that tracks opened databases and "databases-incognito" is a directory name for Incognito mode. 
+ 
+  src/storage/browser/database/database_tracker.h
+
+const base::FilePath::CharType kDatabaseDirectoryName[] =
+    FILE_PATH_LITERAL("databases");
+const base::FilePath::CharType kIncognitoDatabaseDirectoryName[] =
+    FILE_PATH_LITERAL("databases-incognito");
+const base::FilePath::CharType kTrackerDatabaseFileName[] =
+    FILE_PATH_LITERAL("Databases.db");
+
+
+In the case of opening new incognito mode, it does the following execution; check for incognito profile and get a specific file, save and close file handles and shut down databases. IsIncognitoProfile method checks whether it's incognito porfile or not. SaveIncognitoFile method is called when data is saved to virutal file system path. 'vfs_file_name' is of the form <origin_identifier>/<db_name>#<suffix>.Suffix is optional. CloseIncognitoFileHandle
+
+
+  src/storage/browser/database/database_tracker.h
+
+  bool IsIncognitoProfile() const { return is_incognito_; }
+
+  const base::File* GetIncognitoFile(const base::string16& vfs_file_path) const;
+  const base::File* SaveIncognitoFile(const base::string16& vfs_file_path,
+                                      base::File file);
+  void CloseIncognitoFileHandle(const base::string16& vfs_file_path);
+  bool HasSavedIncognitoFileHandle(const base::string16& vfs_file_path) const;
+
+  // Shutdown the database tracker, deleting database files if the tracker is
+  // used for an incognito profile.
+  void Shutdown();
+
+
+
+This private method, DeleteIncognitoDBCirectory enumerate and delete a specifc directory that stores incognito files.
+
+
+void DatabaseTracker::DeleteIncognitoDBDirectory() {
+  is_initialized_ = false;
+
+  for (FileHandlesMap::iterator it = incognito_file_handles_.begin();
+       it != incognito_file_handles_.end(); it++) {
+    delete it->second;
+  }
+}
+}
+
+The execution plan for both incognito mode and normal browsing mode is explains in the comment section. FileHandlesMap is a custom data type that stores files location of the browsing artifacts. 
+
+  /src/storage/browser/database/database_tracker.h
+  // When in incognito mode, store a DELETE_ON_CLOSE handle to each
+  // main DB and journal file that was accessed. When the incognito profile
+  // goes away (or when the browser crashes), all these handles will be
+  // closed, and the files will be deleted.
+  FileHandlesMap incognito_file_handles_;
+
+  // In a non-incognito profile, all DBs in an origin are stored in a directory
+  // named after the origin. In an incognito profile though, we do not want the
+  // directory structure to reveal the origins visited by the user (in case the
+  // browser process crashes and those directories are not deleted). So we use
+  // this map to assign directory names that do not reveal this information.
+  OriginDirectoriesMap incognito_origin_directories_;
+  int incognito_origin_directories_generator_;
+
+  FRIEND_TEST_ALL_PREFIXES(DatabaseTracker, TestHelper);
+};
+
+
+
+

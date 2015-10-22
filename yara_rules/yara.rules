@@ -1,0 +1,79 @@
+rule url_address{
+	strings:
+		$reg=/(www|http).+\.(com|net|org)/  wide ascii
+	condition:
+		any of them
+}
+
+rule email_address{
+	strings:
+		$reg=/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}\b/ wide ascii
+	condition:
+		any of them
+}
+
+rule ipaddress{
+	strings:
+		$reg=/([0-9]{1,3}\.){3}[0-9]{1,3}\x00/ wide ascii
+	condition:
+		any of them
+}
+
+rule password{
+	strings:
+		$a="password" nocase
+	condition:
+		any of them
+}
+
+
+rule youtube_keywords{
+	strings:
+		$a="arctic monkeys" nocase
+		$b="sports animal" nocase
+		$c="bugatti veyron" nocase
+
+	condition:
+		any of them
+}
+
+rule gag_keywords{
+	strings:
+		$a="celebrity" nocase
+		$b="weird" nocase
+
+	condition:
+		any of them
+}
+
+rule soundcloud_keywords{
+	strings:
+		$a="aung" nocase
+		$b="@.aol.com" nocase
+		$c="facebook" nocase
+		$d="bleachers" nocase
+
+	condition:
+		any of them
+}
+
+rule twitter_keywords{
+	strings:
+		$a="atrhein" nocase
+		$b="@.gmail.com" nocase
+		$c="tweeted inside a nested machine" nocase
+
+	condition:
+		any of them
+}
+
+rule amazon_keywords{
+	strings:
+		$a="fire phone" nocase
+		$b="no destination" nocase
+		$c="Amazon book" nocase
+
+	condition:
+		any of them
+}
+
