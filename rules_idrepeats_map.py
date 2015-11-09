@@ -2,10 +2,10 @@
 
 """
 # 
-# usage:
+# usage: python rules_idrepeasts_map.py allpage.repeats allpage.lst.sort
 # output: 
 # Dev: __author__ = 'aung' 
-# Date: 
+# Date: 20151019
 """
 import sys
 repeatlist = sys.argv[1]
@@ -23,7 +23,7 @@ with open(repeatlist,'rb') as f2:
     for l2 in f2:
         # repid = l2.split()[1].strip('\n')
         repid = l2.strip('\n')
-        ind = [i for i, e in enumerate(page_id) if e == repid ]
+        ind = [i for i, e in enumerate(page_id) if e == repid]
         rules= ""
         for i in ind:
             if rules == "":
