@@ -66,6 +66,3 @@ for y, bl3 in enumerate(sc3_new):
 for z, bl4 in enumerate(sc4_new):
     o2.write("4"+"\t"+bl4 + '\t' + sc4_newdesc[y]+'\n')
 
-
-# sed -i 's/|E01/-E01/g' *.fasta* && sed -i 's/|E02/-E02/g' *.fasta*
-
